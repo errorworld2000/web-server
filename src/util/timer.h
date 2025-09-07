@@ -6,21 +6,24 @@
 #include <time.h>
 #include <unordered_map>
 
-using TimerNodeSharedPtr = std::shared_ptr<TimerNode>;
-
 class TimerNode {
  public:
-  explicit TimerNode(int id, int timeout);
-  bool operator<(const TimerNode& t) const {
-    return expires_time_ < t.expires_time_;
+  explicit TimerNode(int id, int timeout,
+                     std::function<void()> timeout_handler = nullptr)
+      : id_(id), timeout_handler_(timeout_handler), deleted_(false) {
+    SetTimeout(timeout);
   }
-  bool SetTimeout(int timeout) {
+  std::chrono::high_resolution_clock::time_point GetExpiresTime() const {
+    return expires_time_;
+  }
+  void SetTimeout(int timeout) {
     expires_time_ = std::chrono::milliseconds(timeout) +
                     std::chrono::high_resolution_clock::now();
   }
   bool IsDeleted() const { return deleted_; }
-  bool SetDeleted(bool value = true) { deleted_ = value; }
+  void SetDeleted(bool value = true) { deleted_ = value; }
   bool GetId() { return id_; }
+  void Handle() { timeout_handler_(); }
 
  private:
   int id_;
@@ -29,10 +32,13 @@ class TimerNode {
   std::chrono::high_resolution_clock::time_point expires_time_;
 };
 
+using TimerNodeSharedPtr = std::shared_ptr<TimerNode>;
+
 class TimerManager {
  public:
-  explicit TimerManager();
-  void AddTimer(int id, int timeout, std::function<void()>&& timeout_handler);
+  explicit TimerManager() {}
+  void AddTimer(int id, int timeout,
+                std::function<void()>&& timeout_handler = nullptr);
   void DelTimer(int id);
   void Tick();
   int GetNextTick();
@@ -40,7 +46,7 @@ class TimerManager {
  private:
   struct TimerCmp {
     bool operator()(const TimerNodeSharedPtr& a, const TimerNodeSharedPtr& b) {
-      return *a < *b;
+      return a->GetExpiresTime() > b->GetExpiresTime();
     };
   };
   std::priority_queue<TimerNodeSharedPtr, std::vector<TimerNodeSharedPtr>,

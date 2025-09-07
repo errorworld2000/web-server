@@ -2,7 +2,12 @@
 
 #include <stdio.h>
 
-EventLoop::EventLoop() : epoller_(new Epoller()), quit_(false) {}
+#include "channel.h"
+
+EventLoop::EventLoop()
+    : epoller_(new Epoller()),
+      quit_(false),
+      timer_manager_(std::make_unique<TimerManager>()) {}
 
 EventLoop::~EventLoop() {}
 
@@ -22,31 +27,36 @@ void EventLoop::AddChannel(std::shared_ptr<Channel> channel, int timeout) {
     perror("epoll_add error!");
     return;
   }
+  fd2channel_[channel->GetFd()] = channel;
   if (timeout > 0) {
-    timer_manager_->AddTimer(channel->GetFd(), timeout, &(channel->DelChannel));
+    timer_manager_->AddTimer(channel->GetFd(), timeout,
+                             [this, channel]() { this->DelChannel(channel); });
   }
 }
 
-void EventLoop::ModChannel(std::shared_ptr<Channel> channel, int timeout) {
-  if (epoller_->ModFd(channel->GetFd(), channel->GetEvents()) < 0) {
+void EventLoop::ModChannel(std::shared_ptr<Channel> channel) {
+  if (!epoller_->ModFd(channel->GetFd(), channel->GetEvents())) {
     perror("error_mod error!");
   }
 }
 
 void EventLoop::DelChannel(std::shared_ptr<Channel> channel) {
-  if (epoller_->DelFd(channel->GetFd()) < 0) {
+  if (!epoller_->DelFd(channel->GetFd())) {
     perror("error_del error!");
   }
+  fd2channel_.erase(channel->GetFd());
 }
 
 void EventLoop::GetActiveChannel() {
   int timeout = -1;
   timeout = timer_manager_->GetNextTick();
+  if (timeout == -1) timeout = 1000;
   int event_count = epoller_->WaitEvents(timeout);
   for (int i = 0; i < event_count; i++) {
     int fd = epoller_->GetEventFd(i);
     uint32_t events = epoller_->GetEvents(i);
-    std::shared_ptr<Channel> channel = std::make_shared<Channel>(fd);
+    std::shared_ptr<Channel> channel = fd2channel_[fd];
+    channel->SetRevents(events);
     active_channels_.push_back(channel);
   }
 }

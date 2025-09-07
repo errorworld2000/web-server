@@ -6,7 +6,7 @@
 #include "event_loop_thread.h"
 class EventLoopThreadPool {
  public:
-  EventLoopThreadPool(std::unique_ptr<EventLoop> base_loop, int thread_nums);
+  EventLoopThreadPool(std::shared_ptr<EventLoop> base_loop, int thread_nums);
   ~EventLoopThreadPool();
 
   EventLoopThreadPool(const EventLoopThreadPool&) = delete;
@@ -16,7 +16,7 @@ class EventLoopThreadPool {
   std::shared_ptr<EventLoop> GetNextLoop();
 
  private:
-  std::unique_ptr<EventLoop> base_loop_;
+  std::shared_ptr<EventLoop> base_loop_;
   int next_;
   bool started_;
   int thraed_nums_;

@@ -3,8 +3,6 @@
 #include <sys/epoll.h>
 #include <vector>
 
-#include "channel.h"
-
 class Epoller {
  public:
   explicit Epoller(int max_event = 8096);

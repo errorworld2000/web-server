@@ -1,7 +1,7 @@
 #include "event_loop_thread_pool.h"
 
 #include <assert.h>
-EventLoopThreadPool::EventLoopThreadPool(std::unique_ptr<EventLoop> base_loop,
+EventLoopThreadPool::EventLoopThreadPool(std::shared_ptr<EventLoop> base_loop,
                                          int thread_nums)
     : thraed_nums_(thread_nums),
       next_(0),

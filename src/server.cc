@@ -13,18 +13,21 @@
 Server::Server(int port, int thread_nums, int timeout)
     : port_(port),
       listen_fd_(SocketBindListen(port_)),
-      accept_channel_(std::make_shared<Channel>(listen_fd_)),
-      event_loop_thread_pool_(std::make_unique<EventLoopThreadPool>(
-          std::make_unique<EventLoop>(), thread_nums)),
+      base_loop_(std::make_shared<EventLoop>()),
+      event_loop_thread_pool_(
+          std::make_unique<EventLoopThreadPool>(base_loop_, thread_nums)),
       timeout_(timeout) {
-  std::unique_ptr<EventLoop> base_loop = std::make_unique<EventLoop>();
+  accept_channel_ = std::make_shared<Channel>(base_loop_, listen_fd_);
   accept_channel_->SetEvents(EPOLLIN | EPOLLET);
   accept_channel_->SetReadHandler(std::bind(&Server::HandlerNewConn, this));
 
-  base_loop->AddChannel(accept_channel_, timeout_);
+  base_loop_->AddChannel(accept_channel_, timeout_);
 }
 
-void Server::Start() {}
+void Server::Start() {
+  event_loop_thread_pool_->Start();
+  base_loop_->Loop();
+}
 
 int Server::SocketBindListen(int port) {
   if (port < 0 || port > 65535) return -1;
@@ -52,6 +55,7 @@ int Server::SocketBindListen(int port) {
     close(listen_fd);
     return -1;
   }
+  SetFdNonBloack(listen_fd);  // Add this line
   return listen_fd;
 }
 
@@ -76,7 +80,7 @@ void Server::HandlerNewConn() {
     }
     SetSocketNodelay(accept_fd);
     // std::shared_ptr<Channel> channel = std::make_shared<Channel>(accept_fd);
-    user_[accept_fd] = std::make_shared<HttpConn>(accept_fd, client_addr,loop);
+    user_[accept_fd] = std::make_shared<HttpConn>(accept_fd, client_addr, loop);
 
     loop->AddChannel(user_[accept_fd]->GetChannel(), timeout_);
   }

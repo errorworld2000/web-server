@@ -4,8 +4,8 @@
 #include <iostream>
 #include <mysql/mysql.h>
 
-#include "sqlconnRAII.h"
-#include "sqlconnpool.h"
+#include "sql/sqlconnRAII.h"
+#include "sql/sqlconnpool.h"
 
 bool AuthService::VerifyUser(const std::string& name, const std::string& pwd,
                              bool isLogin) {

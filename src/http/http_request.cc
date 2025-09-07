@@ -7,6 +7,9 @@
 
 #include "auth_service.h"
 
+const std::unordered_set<std::string> HttpRequest::DEFAULT_HTML{
+    "/index", "/register", "/login", "/welcome", "/error"};
+
 void HttpRequest::Init() {
   method_ = path_ = version_ = body_ = "";
   body_len_ = 0;
@@ -71,6 +74,20 @@ bool HttpRequest::IsKeepAlive() const {
   return false;
 }
 
+std::string HttpRequest::GetHeader(const std::string& key) const {
+  if (header_.count(key)) {
+    return header_.at(key);
+  }
+  return "";
+}
+
+std::string HttpRequest::GetPost(const std::string& key) const {
+  if (post_.count(key)) {
+    return post_.at(key);
+  }
+  return "";
+}
+
 int HttpRequest::ConverHex(char ch) {
   if (ch >= 'A' && ch <= 'F') return ch - 'A' + 10;
   if (ch >= 'a' && ch <= 'f') return ch - 'a' + 10;
@@ -79,7 +96,7 @@ int HttpRequest::ConverHex(char ch) {
 }
 
 bool HttpRequest::ParseRequestLine(const std::string& line) {
-  std::regex patten("^([^ ]*) ([^ ]*) HTTP/([^ ]*)$");
+  std::regex patten("^([^ ]*) ([^ ]*) HTTP/([^ ]*)$", std::regex::ECMAScript);
   std::smatch subMatch;
   if (regex_match(line, subMatch, patten)) {
     method_ = subMatch[1];
@@ -113,7 +130,7 @@ void HttpRequest::ParseHeader(const std::string& line) {
       state_ = ParseState::FINISH;
     }
   } else {
-    std::regex patten("^([^:]*): ?(.*)$");
+    std::regex patten("^([^:]*): ?(.*)$", std::regex::ECMAScript);
     std::smatch subMatch;
     if (regex_match(line, subMatch, patten)) {
       header_[subMatch[1]] = subMatch[2];
@@ -125,27 +142,10 @@ void HttpRequest::ParseHeader(const std::string& line) {
 
 void HttpRequest::ParseBody(const std::string& line) {
   body_ = line;
-  ParsePost();
-  state_ = ParseState::FINISH;
-}
-
-void HttpRequest::ParsePost() {
-  if (method_ == "POST" &&
-      header_["Content-Type"] == "application/x-www-form-urlencoded") {
+  if (GetHeader("Content-Type") == "application/x-www-form-urlencoded") {
     ParseFromUrlencoded();
-    if (DEFAULT_HTML_TAG.count(path_)) {
-      int tag = DEFAULT_HTML_TAG.find(path_)->second;
-      if (tag == 0 || tag == 1) {
-        bool isLogin = (tag == 1);
-        if (AuthService::VerifyUser(post_["username"], post_["password"],
-                                    isLogin)) {
-          path_ = "/welcome.html";
-        } else {
-          path_ = "/error.html";
-        }
-      }
-    }
   }
+  state_ = ParseState::FINISH;
 }
 
 void HttpRequest::ParseFromUrlencoded() {

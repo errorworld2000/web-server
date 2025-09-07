@@ -1,7 +1,11 @@
 #pragma once
-#include <functional>
 
-class Channel {
+#include <functional>
+#include <memory>
+
+class EventLoop;
+
+class Channel : public std::enable_shared_from_this<Channel> {
  public:
   Channel(std::shared_ptr<EventLoop> loop, int fd)
       : loop_(loop), fd_(fd), events_(0) {}
@@ -18,7 +22,7 @@ class Channel {
   void SetConnHandler(std::function<void()>&& handler) {
     conn_handler_ = handler;
   }
-  void SetEvents(uint32_t ev) { events_ = ev; }
+  void SetEvents(uint32_t ev);
   void SetRevents(uint32_t ev) { revents_ = ev; }
   uint32_t GetEvents() { return events_; }
 
@@ -29,7 +33,7 @@ class Channel {
   int fd_;
   uint32_t events_;
   uint32_t revents_;
-  std::shared_ptr<EventLoop> loop_;
+  std::weak_ptr<EventLoop> loop_;
   std::function<void()> read_handler_;
   std::function<void()> write_handler_;
   std::function<void()> error_handler_;

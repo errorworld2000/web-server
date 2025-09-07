@@ -13,7 +13,6 @@
 #include <string>
 #include <thread>
 
-
 class SqlConnPool {
  public:
   static SqlConnPool* Instance();
