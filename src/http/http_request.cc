@@ -10,7 +10,7 @@
 const std::unordered_set<std::string> HttpRequest::DEFAULT_HTML{
     "/index", "/register", "/login", "/welcome", "/error"};
 
-void HttpRequest::Init() {
+void HttpRequest::Clear() {
   method_ = path_ = version_ = body_ = "";
   body_len_ = 0;
   state_ = ParseState::NONE;

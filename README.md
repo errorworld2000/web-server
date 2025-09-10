@@ -22,4 +22,6 @@ timermanager则是用于监听expire事件，tick时检查是否过期wan
 
 发送过程：开启服务器创建一个listenfd，创建一个连接到端口，listenfd收到read创建一个新的fd，fd获取到read对报文进行解析
 
-错了，channel还是纯粹表单就行，用httpconn记录loop
+错了，channel还是纯粹表单就行，用httpconn记录loop,loop和channel是比较底层一个负责结构一个负责运行，实际只要直接创建httpconn，会自动创建需要的表单并添加到到loop内运行
+
+[ ] 收到第二次请求和断开有问题

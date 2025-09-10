@@ -4,7 +4,7 @@
 
 TEST(HttpRequestTest, ParseGetRequest) {
   HttpRequest request;
-  request.Init();
+  request.Clear();
   std::string raw_request_str =
       "GET /index.html HTTP/1.1\r\nHost: localhost\r\n\r\n";
   std::vector<char> buffer(raw_request_str.begin(), raw_request_str.end());

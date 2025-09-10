@@ -1,7 +1,10 @@
 #pragma once
+
 #include <memory>
 #include <netinet/in.h>
 
+#include "channel.h"
+#include "event_loop.h"
 #include "http_request.h"
 #include "http_response.h"
 #include "http_router.h"
@@ -9,8 +12,8 @@
 
 class HttpConn : public ProtocolHandler {
  public:
-  static std::string src_dir;
-  HttpConn(int fd, const sockaddr_in& addr, std::shared_ptr<EventLoop> loop);
+  HttpConn(int fd, const sockaddr_in& addr, std::shared_ptr<EventLoop> loop,
+           int timeout);
   ~HttpConn();
 
  protected:
@@ -18,14 +21,18 @@ class HttpConn : public ProtocolHandler {
   void HandleWrite() override;
 
  private:
- std::shared_ptr<EventLoop> loop_;
+  static std::string src_dir_;
+
+  std::shared_ptr<Channel> channel_;
+  std::shared_ptr<EventLoop> loop_;
   bool is_et_;
   std::vector<char> read_buff_;
   std::vector<char> write_buff_;
   HttpRequest request_;
+  HttpResponse response_;
   HttpRouter router_;
 
-  int iovCnt_;
+  int iov_cnt_;
   iovec iov_[2];
 
   void Error();

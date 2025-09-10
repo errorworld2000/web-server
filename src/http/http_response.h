@@ -2,7 +2,6 @@
 
 #include <fcntl.h>
 #include <string>
-#include <sys/mman.h>
 #include <sys/stat.h>
 #include <unistd.h>
 #include <unordered_map>
@@ -13,6 +12,9 @@ class HttpResponse {
   explicit HttpResponse(int code = -1);
   ~HttpResponse();
 
+  void Clear();
+  void Serialize(std::vector<char>& buff) const;
+
   void SetKeepAlive(bool on) { is_keep_alive_ = on; }
   void SetStatusCode(int code) { code_ = code; }
   void SetStatusText(const std::string& text) { status_text_ = text; }
@@ -20,7 +22,6 @@ class HttpResponse {
   void SetHeader(const std::string& key, const std::string& value);
   bool SetContentFromFile(const std::string& path, const std::string& src_dir);
 
-  void Serialize(std::vector<char>& buff) const;
   size_t GetFileLen() const;
   char* GetFile() const;
 

@@ -1,6 +1,7 @@
 #include "server.h"
 
 #include <assert.h>
+#include <climits>
 #include <cstring>
 #include <functional>
 #include <netinet/in.h>
@@ -17,11 +18,15 @@ Server::Server(int port, int thread_nums, int timeout)
       event_loop_thread_pool_(
           std::make_unique<EventLoopThreadPool>(base_loop_, thread_nums)),
       timeout_(timeout) {
-  accept_channel_ = std::make_shared<Channel>(base_loop_, listen_fd_);
+  accept_channel_ = std::make_shared<Channel>(listen_fd_);
   accept_channel_->SetEvents(EPOLLIN | EPOLLET);
   accept_channel_->SetReadHandler(std::bind(&Server::HandlerNewConn, this));
+  base_loop_->AddChannel(accept_channel_, INT_MAX);
+}
 
-  base_loop_->AddChannel(accept_channel_, timeout_);
+Server::~Server() {
+  base_loop_->DelChannel(accept_channel_);
+  base_loop_->Quit();
 }
 
 void Server::Start() {
@@ -80,9 +85,8 @@ void Server::HandlerNewConn() {
     }
     SetSocketNodelay(accept_fd);
     // std::shared_ptr<Channel> channel = std::make_shared<Channel>(accept_fd);
-    user_[accept_fd] = std::make_shared<HttpConn>(accept_fd, client_addr, loop);
-
-    loop->AddChannel(user_[accept_fd]->GetChannel(), timeout_);
+    user_[accept_fd] =
+        std::make_shared<HttpConn>(accept_fd, client_addr, loop, timeout_);
   }
 }
 

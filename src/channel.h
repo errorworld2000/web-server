@@ -3,37 +3,32 @@
 #include <functional>
 #include <memory>
 
-class EventLoop;
-
 class Channel : public std::enable_shared_from_this<Channel> {
  public:
-  Channel(std::shared_ptr<EventLoop> loop, int fd)
-      : loop_(loop), fd_(fd), events_(0) {}
+  Channel(int fd) : fd_(fd), events_(0) {}
   int GetFd() { return fd_; }
-  void SetReadHandler(std::function<void()>&& headler) {
-    read_handler_ = headler;
+  void SetReadHandler(std::function<void()> headler) {
+    read_handler_ = std::move(headler);
   }
-  void SetWriteHandler(std::function<void()>&& handler) {
-    write_handler_ = handler;
+  void SetWriteHandler(std::function<void()> handler) {
+    write_handler_ = std::move(handler);
   }
-  void SetErrorHandler(std::function<void()>&& handler) {
-    error_handler_ = handler;
+  void SetErrorHandler(std::function<void()> handler) {
+    error_handler_ = std::move(handler);
   }
-  void SetConnHandler(std::function<void()>&& handler) {
-    conn_handler_ = handler;
+  void SetConnHandler(std::function<void()> handler) {
+    conn_handler_ = std::move(handler);
   }
-  void SetEvents(uint32_t ev);
+  void SetEvents(uint32_t ev) { events_ = ev; }
   void SetRevents(uint32_t ev) { revents_ = ev; }
   uint32_t GetEvents() { return events_; }
 
-  void DelChannel();
   void OnEvents();
 
  private:
   int fd_;
   uint32_t events_;
   uint32_t revents_;
-  std::weak_ptr<EventLoop> loop_;
   std::function<void()> read_handler_;
   std::function<void()> write_handler_;
   std::function<void()> error_handler_;

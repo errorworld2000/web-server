@@ -1,5 +1,7 @@
 #include "http_response.h"
 
+#include <sys/mman.h>
+
 const std::unordered_map<std::string, std::string> HttpResponse::SUFFIX_TYPE = {
     {".html", "text/html"},
     {".xml", "text/xml"},
@@ -34,6 +36,20 @@ HttpResponse::~HttpResponse() {
   }
 }
 
+void HttpResponse::Clear() {
+  code_ = 0;
+  status_text_.clear();
+  content_.clear();
+  headers_.clear();
+  is_keep_alive_ = false;
+  
+  if (mmFile_) {
+    munmap(mmFile_, mmFileStat_.st_size);
+    mmFile_ = nullptr;
+  }
+  mmFileStat_ = {0};
+}
+
 void HttpResponse::SetHeader(const std::string& key, const std::string& value) {
   headers_[key] = value;
 }
@@ -48,18 +64,24 @@ bool HttpResponse::SetContentFromFile(const std::string& path,
   if (!(mmFileStat_.st_mode & S_IROTH)) {
     return false;
   }
+  if (mmFileStat_.st_size <= 0) return false;
 
   int src_fd = open(file_path.c_str(), O_RDONLY);
   if (src_fd < 0) {
     return false;
   }
 
-  mmFile_ =
-      (char*)mmap(0, mmFileStat_.st_size, PROT_READ, MAP_PRIVATE, src_fd, 0);
+  mmFile_ = static_cast<char*>(
+      mmap(nullptr, mmFileStat_.st_size, PROT_READ, MAP_PRIVATE, src_fd, 0));
   close(src_fd);
 
-  SetHeader("Content-Type", GetFileType(path));
-  return true;
+  if (mmFile_ == MAP_FAILED) {
+    mmFile_ = nullptr;
+    return false;
+  } else {
+    SetHeader("Content-Type", GetFileType(path));
+    return true;
+  }
 }
 
 void HttpResponse::Serialize(std::vector<char>& buff) const {

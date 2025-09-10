@@ -15,7 +15,7 @@ enum class ParseState {
 
 class HttpRequest {
  public:
-  void Init();
+  void Clear();
   bool Parse(std::vector<char>& buff);
   bool IsKeepAlive() const;
   std::string Path() const { return path_; }

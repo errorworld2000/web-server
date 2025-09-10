@@ -12,11 +12,11 @@ static const int MAXFDS = 100000;
 
 class Server {
  public:
-  Server(int port, int thread_nums, int timeout);
+  Server(int port, int thread_nums, int timeout = 60);
+  ~Server();
   void Start();
 
  private:
-  // std::unique_ptr<EventLoop> event_loop_;
   int timeout_;
   int port_;
   int listen_fd_;
