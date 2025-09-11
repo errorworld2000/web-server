@@ -84,7 +84,6 @@ void Server::HandlerNewConn() {
       return;
     }
     SetSocketNodelay(accept_fd);
-    // std::shared_ptr<Channel> channel = std::make_shared<Channel>(accept_fd);
     user_[accept_fd] =
         std::make_shared<HttpConn>(accept_fd, client_addr, loop, timeout_);
   }

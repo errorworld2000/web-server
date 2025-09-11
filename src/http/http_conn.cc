@@ -31,13 +31,14 @@ void HttpConn::HandleRead() {
       read_buff_.insert(read_buff_.end(), buf, buf + n);
     } else if (n == 0) {
       Close();
-      break;
+      return;
     } else {
-      if (errno == EAGAIN || errno == EWOULDBLOCK)
+      if (errno == EAGAIN || errno == EWOULDBLOCK) {
         break;
-      else
+      } else {
         Error();
-      break;
+        return;
+      }
     }
   } while (is_et_);
 
@@ -59,11 +60,12 @@ void HttpConn::HandleWrite() {
     }
     ssize_t n = writev(fd_, iov_, iov_cnt_);
     if (n < 0) {
-      if (errno == EAGAIN || errno == EWOULDBLOCK)
+      if (errno == EAGAIN || errno == EWOULDBLOCK) {
         break;
-      else
+      } else {
         Error();
-      break;
+        return;
+      }
     } else if (n == 0) {
       Error();
       return;
@@ -92,7 +94,10 @@ void HttpConn::HandleWrite() {
   } while (is_et_);
 }
 
-void HttpConn::Error() { perror("error"); }
+void HttpConn::Error() {
+  perror("error");
+  Close();
+}
 
 void HttpConn::Close() { loop_->DelChannel(channel_); }
 

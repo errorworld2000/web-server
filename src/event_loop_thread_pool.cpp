@@ -16,7 +16,8 @@ void EventLoopThreadPool::Start() {
   assert(!started_);
   started_ = true;
   for (int i = 0; i < thraed_nums_; i++) {
-    std::shared_ptr<EventLoopThread> t(new EventLoopThread());
+    std::string name = "loopthread" + std::to_string(i);
+    auto t = std::make_shared<EventLoopThread>(name);
     threads_.push_back(t);
     loops_.push_back(t->StartLoop());
   }

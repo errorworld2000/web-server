@@ -3,15 +3,11 @@
 #include <sys/epoll.h>
 
 void Channel::OnEvents() {
-  events_ = 0;
   if ((revents_ & EPOLLHUP) && !(revents_ & EPOLLIN)) {
-    events_ = 0;
-    return;
+    OnClose();
   }
   if (revents_ & EPOLLERR) {
     OnError();
-    events_ = 0;
-    return;
   }
   if (revents_ & (EPOLLIN | EPOLLPRI | EPOLLRDHUP)) {
     OnRead();
@@ -19,5 +15,6 @@ void Channel::OnEvents() {
   if (revents_ & EPOLLOUT) {
     OnWrite();
   }
-  OnConn();
+
+  revents_ = 0;
 }

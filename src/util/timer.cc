@@ -1,47 +1,61 @@
 #include "timer.h"
 
-void TimerManager::AddTimer(int id, int timeout,
-                            std::function<void()>&& timeout_handler) {
-  if (auto it = timer_node_map_.find(id); it != timer_node_map_.end()) {
-    auto oldTimer = it->second;
-    oldTimer->SetTimeout(timeout);
-    if (oldTimer->IsDeleted()) {
-      oldTimer->SetDeleted(false);
-    }
-    return;
+#include <chrono>
+#include <queue>
+#include <unordered_map>
+
+struct TimerManager::TimerNode {
+  TimerNode(int id, int version, int timeout, std::function<void()> handler)
+      : id(id), version(version), handler(std::move(handler)), deleted(false) {
+    expires = std::chrono::high_resolution_clock::now() +
+              std::chrono::milliseconds(timeout);
   }
-  auto newTimer = std::make_shared<TimerNode>(id, timeout, timeout_handler);
-  timer_node_queue_.push(newTimer);
-  timer_node_map_[id] = newTimer;
+
+  int id;
+  int version;
+  bool deleted;
+  std::function<void()> handler;
+  std::chrono::high_resolution_clock::time_point expires;
+};
+
+bool TimerManager::TimerCmp::operator()(const TimerNodePtr& a,
+                                        const TimerNodePtr& b) const {
+  return a->expires > b->expires;
+}
+
+void TimerManager::AddTimer(int id, int timeout,
+                            std::function<void()> handler) {
+  int version = ++fd2version_[id];
+  auto node =
+      std::make_shared<TimerNode>(id, version, timeout, std::move(handler));
+  timer_queue_.push(node);
 }
 
 void TimerManager::DelTimer(int id) {
-  if (auto it = timer_node_map_.find(id); it != timer_node_map_.end()) {
-    it->second->SetDeleted();
+  if (auto it = fd2version_.find(id); it != fd2version_.end()) {
+    ++it->second;
   }
 }
 
 void TimerManager::Tick() {
-  while (!timer_node_queue_.empty()) {
-    auto it = timer_node_queue_.top();
-    if (std::chrono::duration_cast<std::chrono::milliseconds>(
-            it->GetExpiresTime() - std::chrono::high_resolution_clock::now())
-            .count() > 0) {
-      break;
+  auto now = std::chrono::high_resolution_clock::now();
+  while (!timer_queue_.empty()) {
+    auto node = timer_queue_.top();
+    if (node->expires > now) break;
+
+    timer_queue_.pop();
+    if (fd2version_[node->id] == node->version && !node->deleted) {
+      if (node->handler) node->handler();
     }
-    if (!it->IsDeleted()) it->Handle();
-    timer_node_queue_.pop();
-    timer_node_map_.erase(it->GetId());
   }
 }
 
 int TimerManager::GetNextTick() {
-  int res = -1;
-  if (!timer_node_queue_.empty()) {
-    res = std::chrono::duration_cast<std::chrono::milliseconds>(
-              timer_node_queue_.top()->GetExpiresTime() -
-              std::chrono::high_resolution_clock::now())
-              .count();
-  }
-  return res;
+  if (timer_queue_.empty()) return -1;
+  auto now = std::chrono::high_resolution_clock::now();
+  auto node = timer_queue_.top();
+  auto diff =
+      std::chrono::duration_cast<std::chrono::milliseconds>(node->expires - now)
+          .count();
+  return diff > 0 ? diff : 0;
 }

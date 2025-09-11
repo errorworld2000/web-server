@@ -1,13 +1,25 @@
 #include "event_loop.h"
 
 #include <stdio.h>
+#include <sys/eventfd.h>
+#include <unistd.h>
 
 #include "channel.h"
 
 EventLoop::EventLoop()
     : epoller_(new Epoller()),
       quit_(false),
-      timer_manager_(std::make_unique<TimerManager>()) {}
+      timer_manager_(std::make_unique<TimerManager>()) {
+  wake_fd_ = eventfd(0, EFD_NONBLOCK | EFD_CLOEXEC);
+  if (wake_fd_ < 0) {
+    perror("create wake-fd error");
+    abort();
+  }
+  std::shared_ptr<Channel> wake_ch = std::make_shared<Channel>(wake_fd_);
+  wake_ch->SetEvents(EPOLLIN | EPOLLET);
+  wake_ch->SetReadHandler([this] { HandleRead(); });
+  AddChannel(wake_ch);
+}
 
 EventLoop::~EventLoop() {}
 
@@ -32,12 +44,14 @@ void EventLoop::AddChannel(std::shared_ptr<Channel> channel, int timeout) {
     timer_manager_->AddTimer(channel->GetFd(), timeout,
                              [this, channel]() { this->DelChannel(channel); });
   }
+  WakeUp();
 }
 
 void EventLoop::ModChannel(std::shared_ptr<Channel> channel) {
   if (!epoller_->ModFd(channel->GetFd(), channel->GetEvents())) {
     perror("error_mod error!");
   }
+  WakeUp();
 }
 
 void EventLoop::DelChannel(std::shared_ptr<Channel> channel) {
@@ -45,12 +59,12 @@ void EventLoop::DelChannel(std::shared_ptr<Channel> channel) {
     perror("error_del error!");
   }
   fd2channel_.erase(channel->GetFd());
+  timer_manager_->DelTimer(channel->GetFd());
+  WakeUp();
 }
 
 void EventLoop::GetActiveChannel() {
-  int timeout = -1;
-  timeout = timer_manager_->GetNextTick();
-  if (timeout == -1) timeout = 1000;
+  int timeout = timer_manager_->GetNextTick();
   int event_count = epoller_->WaitEvents(timeout);
   for (int i = 0; i < event_count; i++) {
     int fd = epoller_->GetEventFd(i);
@@ -58,5 +72,21 @@ void EventLoop::GetActiveChannel() {
     std::shared_ptr<Channel> channel = fd2channel_[fd];
     channel->SetRevents(events);
     active_channels_.push_back(channel);
+  }
+}
+
+void EventLoop::WakeUp() {
+  uint64_t one = 1;
+  ssize_t n = write(wake_fd_, &one, sizeof(one));
+  if (n != sizeof(one)) {
+    perror("wake-eventfd write failed");
+  }
+}
+
+void EventLoop::HandleRead() {
+  uint64_t cnt;
+  ssize_t n = read(wake_fd_, &cnt, sizeof(cnt));
+  if (n != sizeof(cnt)) {
+    perror("wake-eventfd read failed");
   }
 }

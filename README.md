@@ -20,8 +20,10 @@ timermanager则是用于监听expire事件，tick时检查是否过期wan
 
 6. read事件绑定连接时，手动绑定麻烦，创建个httpconn替我们绑定。绑定完事件后发现如果读取完了或者报错想要关闭有点麻烦，得在channel里面记录eventloop便于我们关闭监听和修改channel。
 
-发送过程：开启服务器创建一个listenfd，创建一个连接到端口，listenfd收到read创建一个新的fd，fd获取到read对报文进行解析
+7. channel还是纯粹表单就行，用httpconn记录loop,loop和channel是比较底层一个负责结构一个负责运行，实际只要直接创建httpconn，会自动创建需要的表单并添加到到loop内运行
 
-错了，channel还是纯粹表单就行，用httpconn记录loop,loop和channel是比较底层一个负责结构一个负责运行，实际只要直接创建httpconn，会自动创建需要的表单并添加到到loop内运行
+8. eventloop里面有点问题，需要考虑loop时和add_channel可能出现的异步问题，wait时可能会有新的channel加入，可能会延迟处理，添加wakechannel用于唤醒。
+
+9. timer_manager之前懒删除没考虑好，替换为使用版本号判断
 
 [ ] 收到第二次请求和断开有问题

@@ -12,7 +12,7 @@ static const int MAXFDS = 100000;
 
 class Server {
  public:
-  Server(int port, int thread_nums, int timeout = 60);
+  Server(int port, int thread_nums, int timeout);
   ~Server();
   void Start();
 

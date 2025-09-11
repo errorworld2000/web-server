@@ -16,8 +16,8 @@ class Channel : public std::enable_shared_from_this<Channel> {
   void SetErrorHandler(std::function<void()> handler) {
     error_handler_ = std::move(handler);
   }
-  void SetConnHandler(std::function<void()> handler) {
-    conn_handler_ = std::move(handler);
+  void SetCloseHandler(std::function<void()> handler) {
+    close_handler_ = std::move(handler);
   }
   void SetEvents(uint32_t ev) { events_ = ev; }
   void SetRevents(uint32_t ev) { revents_ = ev; }
@@ -32,7 +32,7 @@ class Channel : public std::enable_shared_from_this<Channel> {
   std::function<void()> read_handler_;
   std::function<void()> write_handler_;
   std::function<void()> error_handler_;
-  std::function<void()> conn_handler_;
+  std::function<void()> close_handler_;
   void OnRead() {
     if (read_handler_) read_handler_();
   }
@@ -42,7 +42,7 @@ class Channel : public std::enable_shared_from_this<Channel> {
   void OnError() {
     if (error_handler_) error_handler_();
   }
-  void OnConn() {
-    if (conn_handler_) conn_handler_();
+  void OnClose() {
+    if (close_handler_) close_handler_();
   }
 };

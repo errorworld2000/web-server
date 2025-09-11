@@ -6,7 +6,7 @@
 #include "event_loop.h"
 class EventLoopThread {
  public:
-  EventLoopThread();
+  explicit EventLoopThread(const std::string& name = "");
   ~EventLoopThread();
   std::shared_ptr<EventLoop> StartLoop();
   EventLoopThread(const EventLoopThread&) = delete;
@@ -14,6 +14,7 @@ class EventLoopThread {
 
  private:
   bool started_;
+  std::string name_;
   std::shared_ptr<EventLoop> loop_;
   std::mutex mutex_;
   std::thread thread_;

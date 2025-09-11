@@ -2,7 +2,8 @@
 
 #include <assert.h>
 
-EventLoopThread::EventLoopThread() : loop_(nullptr) {}
+EventLoopThread::EventLoopThread(const std::string& name)
+    : name_(name), loop_(nullptr) {}
 
 EventLoopThread::~EventLoopThread() {
   if (loop_ != nullptr) {
@@ -23,6 +24,9 @@ std::shared_ptr<EventLoop> EventLoopThread::StartLoop() {
 }
 
 void EventLoopThread::ThreadFunction() {
+  if (!name_.empty()) {
+    pthread_setname_np(pthread_self(), name_.c_str());
+  }
   auto loop = std::make_shared<EventLoop>();
   {
     std::lock_guard<std::mutex> lock(mutex_);
