@@ -26,4 +26,12 @@ timermanager则是用于监听expire事件，tick时检查是否过期wan
 
 9. timer_manager之前懒删除没考虑好，替换为使用版本号判断
 
+10. eventloop和timer里面可能出现线程安全问题
+
+11. 服务器连接也是et模式需要一次读完
+
+12. eventloop添加队列
+
+13. 之前清理函数没写好，重新给timer和httpconn传入回调函数
+
 [ ] 收到第二次请求和断开有问题

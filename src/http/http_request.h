@@ -20,6 +20,7 @@ class HttpRequest {
   bool IsKeepAlive() const;
   std::string Path() const { return path_; }
   std::string GetMethod() const { return method_; }
+  std::string GetVersion() const { return version_; }
   std::string GetHeader(const std::string& key) const;
   std::string GetPost(const std::string& key) const;
   bool IsValid() const { return state_ != ParseState::ERROR; }

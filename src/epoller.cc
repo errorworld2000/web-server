@@ -1,6 +1,7 @@
 #include "epoller.h"
 
 #include <assert.h>
+#include <cerrno>
 #include <stdio.h>
 #include <unistd.h>
 
@@ -34,8 +35,12 @@ bool Epoller::DelFd(int fd) {
 }
 
 int Epoller::WaitEvents(int timeoutMs) {
-  return epoll_wait(epoller_fd_, &events_[0], static_cast<int>(events_.size()),
-                    timeoutMs);
+  int event_count;
+  do {
+    event_count = epoll_wait(epoller_fd_, &events_[0],
+                             static_cast<int>(events_.size()), timeoutMs);
+  } while (event_count < 0 && errno == EINTR);
+  return event_count;
 }
 
 int Epoller::GetEventFd(size_t i) const {

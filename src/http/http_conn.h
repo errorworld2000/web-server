@@ -1,5 +1,6 @@
 #pragma once
 
+#include <functional>
 #include <memory>
 #include <netinet/in.h>
 
@@ -13,7 +14,7 @@
 class HttpConn : public ProtocolHandler {
  public:
   HttpConn(int fd, const sockaddr_in& addr, std::shared_ptr<EventLoop> loop,
-           int timeout);
+           int timeout, std::function<void(int)> cb);
   ~HttpConn();
 
  protected:
@@ -22,6 +23,7 @@ class HttpConn : public ProtocolHandler {
 
  private:
   static std::string src_dir_;
+  std::function<void(int)> cb_;
 
   std::shared_ptr<Channel> channel_;
   std::shared_ptr<EventLoop> loop_;

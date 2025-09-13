@@ -1,6 +1,7 @@
 #include "server.h"
 
 #include <assert.h>
+#include <cerrno>
 #include <climits>
 #include <cstring>
 #include <functional>
@@ -21,7 +22,8 @@ Server::Server(int port, int thread_nums, int timeout)
   accept_channel_ = std::make_shared<Channel>(listen_fd_);
   accept_channel_->SetEvents(EPOLLIN | EPOLLET);
   accept_channel_->SetReadHandler(std::bind(&Server::HandlerNewConn, this));
-  base_loop_->AddChannel(accept_channel_, INT_MAX);
+  base_loop_->AddChannel(accept_channel_, INT_MAX,
+                         [this] { base_loop_->DelChannel(accept_channel_); });
 }
 
 Server::~Server() {
@@ -60,38 +62,52 @@ int Server::SocketBindListen(int port) {
     close(listen_fd);
     return -1;
   }
-  SetFdNonBloack(listen_fd);  // Add this line
+  SetFdNonBlock(listen_fd);
   return listen_fd;
 }
 
 void Server::HandlerNewConn() {
   sockaddr_in client_addr;
-  memset(&client_addr, 0, sizeof(sockaddr_in));
   socklen_t client_addr_len = sizeof(client_addr);
-  int accept_fd = -1;
+  while (true) {
+    int accept_fd =
+        accept(listen_fd_, (sockaddr*)&client_addr, &client_addr_len);
+    if (accept_fd < 0) {
+      if (errno == EAGAIN || errno == EWOULDBLOCK) {
+        break;
+      } else if (errno == EINTR) {
+        continue;
+      } else {
+        perror("accept error");
+        break;
+      }
+    }
 
-  while ((accept_fd = accept(listen_fd_, (sockaddr*)&client_addr,
-                             &client_addr_len)) > 0) {
-    std::shared_ptr<EventLoop> loop = event_loop_thread_pool_->GetNextLoop();
-    // TODO: log
     if (accept_fd > MAXFDS) {
+      perror("this fd is over MAXFD!");
       close(accept_fd);
       continue;
     }
 
-    if (SetFdNonBloack(accept_fd) < 0) {
+    if (SetFdNonBlock(accept_fd) < 0) {
       perror("Set fd non block failed!");
-      return;
+      close(accept_fd);
+      continue;
     }
+
     SetSocketNodelay(accept_fd);
+    std::shared_ptr<EventLoop> loop = event_loop_thread_pool_->GetNextLoop();
     user_[accept_fd] =
-        std::make_shared<HttpConn>(accept_fd, client_addr, loop, timeout_);
+        std::make_shared<HttpConn>(accept_fd, client_addr, loop, timeout_,
+                                   [this](int fd) { user_[fd] = nullptr; });
   }
 }
 
-int Server::SetFdNonBloack(int fd) {
+int Server::SetFdNonBlock(int fd) {
   assert(fd > 0);
-  return fcntl(fd, F_SETFL, fcntl(fd, F_GETFD, 0) | O_NONBLOCK);
+  int flags = fcntl(fd, F_GETFL, 0);
+  if (flags == -1) return -1;
+  return fcntl(fd, F_SETFL, flags | O_NONBLOCK);
 }
 
 void Server::SetSocketNodelay(int fd) {

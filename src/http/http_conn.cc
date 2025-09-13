@@ -7,19 +7,35 @@
 std::string HttpConn::src_dir_ = "../resources";
 
 HttpConn::HttpConn(int fd, const sockaddr_in& addr,
-                   std::shared_ptr<EventLoop> loop, int timeout)
+                   std::shared_ptr<EventLoop> loop, int timeout,
+                   std::function<void(int)> cb)
     : ProtocolHandler(fd, addr, timeout),
       is_et_(true),
       loop_(loop),
-      channel_(std::make_shared<Channel>(fd_)) {
+      channel_(std::make_shared<Channel>(fd_)),
+      cb_(cb) {
+  // printf("[DEBUG] HttpConn created for fd: %d\n", fd_);
   channel_->SetReadHandler([this] { HandleRead(); });
   channel_->SetWriteHandler([this] { HandleWrite(); });
   channel_->SetEvents(EPOLLIN | EPOLLET);
-  loop_->AddChannel(channel_, timeout_);
+  loop_->AddChannel(channel_, timeout_, [this] { cb_(fd_); });
 }
 
 HttpConn::~HttpConn() {
-  if (fd_ > 0) close(fd_);
+  if (fd_ > 0) {
+    close(fd_);
+  }
+}
+
+void HttpConn::Error() {
+  printf("[DEBUG] fd: %d, error occurred\n", fd_);
+  perror("error");
+  Close();
+}
+
+void HttpConn::Close() {
+  loop_->DelChannel(channel_);
+  cb_(fd_);
 }
 
 void HttpConn::HandleRead() {
@@ -62,54 +78,55 @@ void HttpConn::HandleWrite() {
     if (n < 0) {
       if (errno == EAGAIN || errno == EWOULDBLOCK) {
         break;
-      } else {
-        Error();
-        return;
       }
+      if (errno == EINTR) continue;
+      Error();
+      return;
     } else if (n == 0) {
       Error();
       return;
-    } else {
-      if (n == total) {
-        if (request_.IsKeepAlive()) {
-          channel_->SetEvents(EPOLLIN | EPOLLET);
-          loop_->ModChannel(channel_);
-        } else {
-          loop_->DelChannel(channel_);
-        }
+    }
 
+    if (n == total) {
+      if (!request_.IsKeepAlive()) {
+        Close();
         return;
-      } else if (n > iov_[0].iov_len) {
-        iov_[1].iov_base = (char*)iov_[1].iov_base + (n - iov_[0].iov_len);
-        iov_[1].iov_len -= (n - iov_[0].iov_len);
-        if (iov_[0].iov_len != 0) {
-          iov_[0].iov_len = 0;
-        }
-      } else {
-        iov_[0].iov_base = (char*)iov_[0].iov_base + n;
-        iov_[0].iov_len -= n;
-        channel_->SetEvents(EPOLLOUT | EPOLLET);
       }
+
+      if (OnProcess()) {
+        continue;
+      } else {
+        channel_->SetEvents(EPOLLIN | EPOLLET);
+        loop_->ModChannel(channel_);
+        return;
+      }
+
+    } else if (n > iov_[0].iov_len) {
+      iov_[1].iov_base = (char*)iov_[1].iov_base + (n - iov_[0].iov_len);
+      iov_[1].iov_len -= (n - iov_[0].iov_len);
+      if (iov_[0].iov_len != 0) {
+        iov_[0].iov_len = 0;
+      }
+    } else {
+      iov_[0].iov_base = (char*)iov_[0].iov_base + n;
+      iov_[0].iov_len -= n;
     }
   } while (is_et_);
 }
-
-void HttpConn::Error() {
-  perror("error");
-  Close();
-}
-
-void HttpConn::Close() { loop_->DelChannel(channel_); }
 
 bool HttpConn::OnProcess() {
   request_.Clear();
   response_.Clear();
 
   if (!request_.Parse(read_buff_)) {
+    // printf("[DEBUG] fd: %d, request parse failed\n", fd_);
     return false;
   }
 
   router_.Route(request_, response_, src_dir_);
+  // printf("[DEBUG] fd: %d, routing complete, status code: %d\n", fd_,
+  //        response_.GetStatusCode());
+  write_buff_.clear();
   response_.Serialize(write_buff_);
 
   iov_[0].iov_base = const_cast<char*>(write_buff_.data());

@@ -42,7 +42,7 @@ void HttpResponse::Clear() {
   content_.clear();
   headers_.clear();
   is_keep_alive_ = false;
-  
+
   if (mmFile_) {
     munmap(mmFile_, mmFileStat_.st_size);
     mmFile_ = nullptr;
@@ -86,8 +86,8 @@ bool HttpResponse::SetContentFromFile(const std::string& path,
 
 void HttpResponse::Serialize(std::vector<char>& buff) const {
   // Status line
-  std::string status_line =
-      "HTTP/1.1 " + std::to_string(code_) + " " + status_text_ + "\r\n";
+  std::string status_line = "HTTP/" + version_ + " " + std::to_string(code_) +
+                            " " + status_text_ + "\r\n";
   buff.insert(buff.end(), status_line.begin(), status_line.end());
 
   // Headers

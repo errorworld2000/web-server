@@ -2,6 +2,7 @@
 
 #include <functional>
 #include <memory>
+#include <mutex>
 #include <queue>
 
 class TimerManager {
@@ -20,6 +21,7 @@ class TimerManager {
     bool operator()(const TimerNodePtr& a, const TimerNodePtr& b) const;
   };
 
+  std::mutex mutex_;
   std::priority_queue<TimerNodePtr, std::vector<TimerNodePtr>, TimerCmp>
       timer_queue_;
   std::unordered_map<int, int> fd2version_;

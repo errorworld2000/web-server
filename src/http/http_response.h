@@ -15,13 +15,16 @@ class HttpResponse {
   void Clear();
   void Serialize(std::vector<char>& buff) const;
 
-  void SetKeepAlive(bool on) { is_keep_alive_ = on; }
+  void SetVersion(const std::string& version) { version_ = version; }
   void SetStatusCode(int code) { code_ = code; }
   void SetStatusText(const std::string& text) { status_text_ = text; }
+  void SetKeepAlive(bool on) { is_keep_alive_ = on; }
+
   void SetContent(const std::string& content) { content_ = content; }
   void SetHeader(const std::string& key, const std::string& value);
   bool SetContentFromFile(const std::string& path, const std::string& src_dir);
 
+  int GetStatusCode() const { return code_; }
   size_t GetFileLen() const;
   char* GetFile() const;
 
@@ -29,6 +32,7 @@ class HttpResponse {
   static const std::unordered_map<std::string, std::string> SUFFIX_TYPE;
 
   int code_;
+  std::string version_;
   std::string status_text_;
   std::string content_;
   std::unordered_map<std::string, std::string> headers_;

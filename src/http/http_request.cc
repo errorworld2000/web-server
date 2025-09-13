@@ -52,7 +52,9 @@ bool HttpRequest::Parse(std::vector<char>& buff) {
 
   // --- (Phase 2: Parse Request Body) ---
   if (state_ == ParseState::BODY) {
-    if (buff.size() - parsed_len < body_len_) return false;
+    if (buff.size() - parsed_len < body_len_) {
+      return false;
+    }
     auto body_end = buff.begin() + parsed_len + body_len_;
     ParseBody(std::string(buff.begin() + parsed_len, body_end));
     parsed_len += body_len_;
@@ -67,11 +69,17 @@ bool HttpRequest::Parse(std::vector<char>& buff) {
 }
 
 bool HttpRequest::IsKeepAlive() const {
-  if (header_.count("Connection") == 1) {
-    return header_.find("Connection")->second == "keep-alive" &&
-           version_ == "1.1";
+  if (version_ == "1.1") {
+    if (header_.count("Connection") && (header_.at("Connection") == "close" ||
+                                        header_.at("Connection") == "Close")) {
+      return false;
+    }
+    return true;
+  } else {
+    return header_.count("Connection") &&
+           (header_.at("Connection") == "keep-alive" ||
+            header_.at("Connection") == "Keep-Alive");
   }
-  return false;
 }
 
 std::string HttpRequest::GetHeader(const std::string& key) const {

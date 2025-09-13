@@ -18,6 +18,7 @@ void HttpRouter::Route(const HttpRequest& req, HttpResponse& resp,
     }
   }
 
+  resp.SetVersion(req.GetVersion());
   resp.SetStatusCode(200);
   resp.SetStatusText("OK");
   resp.SetKeepAlive(req.IsKeepAlive());
@@ -25,7 +26,6 @@ void HttpRouter::Route(const HttpRequest& req, HttpResponse& resp,
     resp.SetStatusCode(404);
     resp.SetStatusText("Not Found");
     if (!resp.SetContentFromFile("/error.html", src_dir)) {
-      // If error.html is also not found, set a default error message.
       resp.SetStatusCode(500);
       resp.SetStatusText("Internal Server Error");
       resp.SetContent("<h1>Internal Server Error</h1>");

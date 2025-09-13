@@ -27,6 +27,6 @@ class Server {
 
   int SocketBindListen(int port);
   void HandlerNewConn();
-  int SetFdNonBloack(int fd);
+  int SetFdNonBlock(int fd);
   void SetSocketNodelay(int fd);
 };

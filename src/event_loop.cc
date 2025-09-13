@@ -9,7 +9,8 @@
 EventLoop::EventLoop()
     : epoller_(new Epoller()),
       quit_(false),
-      timer_manager_(std::make_unique<TimerManager>()) {
+      timer_manager_(std::make_unique<TimerManager>()),
+      thread_id_(std::this_thread::get_id()) {
   wake_fd_ = eventfd(0, EFD_NONBLOCK | EFD_CLOEXEC);
   if (wake_fd_ < 0) {
     perror("create wake-fd error");
@@ -18,7 +19,7 @@ EventLoop::EventLoop()
   std::shared_ptr<Channel> wake_ch = std::make_shared<Channel>(wake_fd_);
   wake_ch->SetEvents(EPOLLIN | EPOLLET);
   wake_ch->SetReadHandler([this] { HandleRead(); });
-  AddChannel(wake_ch);
+  AddChannel(wake_ch, -1, [this, wake_ch] { DelChannel(wake_ch); });
 }
 
 EventLoop::~EventLoop() {}
@@ -29,38 +30,42 @@ void EventLoop::Loop() {
     GetActiveChannel();
     for (auto& it : active_channels_) it->OnEvents();
     timer_manager_->Tick();
+    DoPendingFunctors();
   }
 }
 
-void EventLoop::Quit() {}
+void EventLoop::Quit() { quit_ = true; }
 
-void EventLoop::AddChannel(std::shared_ptr<Channel> channel, int timeout) {
-  if (epoller_->AddFd(channel->GetFd(), channel->GetEvents()) < 0) {
-    perror("epoll_add error!");
-    return;
-  }
-  fd2channel_[channel->GetFd()] = channel;
-  if (timeout > 0) {
-    timer_manager_->AddTimer(channel->GetFd(), timeout,
-                             [this, channel]() { this->DelChannel(channel); });
-  }
-  WakeUp();
+void EventLoop::AddChannel(std::shared_ptr<Channel> channel, int timeout,
+                           std::function<void()> cb) {
+  RunInLoop([this, channel, timeout, cb] {
+    if (epoller_->AddFd(channel->GetFd(), channel->GetEvents()) < 0) {
+      perror("epoll_add error!");
+      return;
+    }
+    fd2channel_[channel->GetFd()] = channel;
+    if (timeout > 0) {
+      timer_manager_->AddTimer(channel->GetFd(), timeout, std::move(cb));
+    }
+  });
 }
 
 void EventLoop::ModChannel(std::shared_ptr<Channel> channel) {
-  if (!epoller_->ModFd(channel->GetFd(), channel->GetEvents())) {
-    perror("error_mod error!");
-  }
-  WakeUp();
+  RunInLoop([this, channel] {
+    if (!epoller_->ModFd(channel->GetFd(), channel->GetEvents())) {
+      perror("error_mod error!");
+    }
+  });
 }
 
 void EventLoop::DelChannel(std::shared_ptr<Channel> channel) {
-  if (!epoller_->DelFd(channel->GetFd())) {
-    perror("error_del error!");
-  }
-  fd2channel_.erase(channel->GetFd());
-  timer_manager_->DelTimer(channel->GetFd());
-  WakeUp();
+  RunInLoop([this, channel] {
+    if (!epoller_->DelFd(channel->GetFd())) {
+      perror("error_del error!");
+    }
+    fd2channel_.erase(channel->GetFd());
+    timer_manager_->DelTimer(channel->GetFd());
+  });
 }
 
 void EventLoop::GetActiveChannel() {
@@ -69,9 +74,13 @@ void EventLoop::GetActiveChannel() {
   for (int i = 0; i < event_count; i++) {
     int fd = epoller_->GetEventFd(i);
     uint32_t events = epoller_->GetEvents(i);
-    std::shared_ptr<Channel> channel = fd2channel_[fd];
-    channel->SetRevents(events);
-    active_channels_.push_back(channel);
+
+    auto it = fd2channel_.find(fd);
+    if (it != fd2channel_.end()) {
+      auto channel = it->second;
+      channel->SetRevents(events);
+      active_channels_.push_back(channel);
+    }
   }
 }
 
@@ -89,4 +98,34 @@ void EventLoop::HandleRead() {
   if (n != sizeof(cnt)) {
     perror("wake-eventfd read failed");
   }
+}
+
+void EventLoop::DoPendingFunctors() {
+  std::vector<std::function<void()>> functors;
+  calling_pending_functors_ = true;
+  {
+    std::lock_guard<std::mutex> lock(mutex_);
+    functors.swap(pending_functors_);
+  }
+  for (auto& f : functors) f();
+  calling_pending_functors_ = false;
+}
+
+void EventLoop::RunInLoop(std::function<void()>&& cb) {
+  if (IsInLoopThread())
+    cb();
+  else
+    QueueInLoop(std::move(cb));
+}
+
+void EventLoop::QueueInLoop(std::function<void()>&& cb) {
+  {
+    std::lock_guard<std::mutex> lock(mutex_);
+    pending_functors_.emplace_back(std::move(cb));
+  }
+  if (!IsInLoopThread() || calling_pending_functors_) WakeUp();
+}
+
+bool EventLoop::IsInLoopThread() {
+  return std::this_thread::get_id() == thread_id_;
 }
