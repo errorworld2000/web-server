@@ -34,4 +34,11 @@ timermanager则是用于监听expire事件，tick时检查是否过期wan
 
 13. 之前清理函数没写好，重新给timer和httpconn传入回调函数
 
-[ ] 收到第二次请求和断开有问题
+14. QPS只有3000，利用perf以及flamegraph进行分析，发现ParseHeader以及ParseLine耗时较久。
+
+[x] 收到第二次请求和断开有问题,发现是忘记对建立的fd进行释放。
+# perf script -i perf.data &> perf.unfold
+
+# ./third_party/FlameGraph/stackcollapse-perf.pl perf.unfold &> perf.folded
+
+# ./third_party/FlameGraph/flamegraph.pl perf.folded > perf.svg
