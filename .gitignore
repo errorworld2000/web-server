@@ -1,6 +1,8 @@
 build
 .vscode
 
-perf.data
+perf.data*
 perf.folded
 perf.unfold
+
+GEMINI.md

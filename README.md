@@ -1,44 +1,142 @@
-### epoll(工具)
+# Web Server
 
-### reactor(模式)
-利用channel封装fd以及关心事件对应的回调函数
-利用EventLoop将事件分发给对应channel，回调chennel注册的回调函数
+---
 
-### One Loop per Thread
-每个线程一个EventPool,主线程负责accept连接
+## 📌 核心架构设计
 
-1. 先开始写channel,添加handler和handle以及events,发现要指定一个eventloop挂载
+本服务器基于 **C++** 实现，采用主流的 **Reactor** 设计模式，并结合 **One Loop per Thread** 的并发模型。
 
-2. 先写epoller,主要对epoll的函数进行封装，接收channel注册到epoll，wait时获取事件并放到events_，接收channel时要记录才能获取到activechannel;
-timermanager则是用于监听expire事件，tick时检查是否过期wan
+### Reactor 模式
 
-3. 写eventloop，主要是将epoller和channel和timermanager封装，接收channel然后loop里进行waitevent操作获取事件。
+* **Channel**
+  封装 `fd`、其关心的事件以及对应的回调函数，是事件的抽象载体。
 
-4. 然后是thread，主要就是线程创建loop任务，pool再管理全部线程，但pool还是要存loop因为实际还是操作loop，thread只是复制创建。创建pool需要先传个loop初始化(不对当前线程校验)
+* **EventLoop**
+  事件循环核心。调用 `epoll_wait` 等待事件发生，并将激活的事件分发给对应的 `Channel`，再由 `Channel` 执行注册的回调函数。
 
-5. 写server，主要先创建listenfd，再创建新的acceptchannel，然后生成个loop用于处理accptchannel以及生成eventloopthreadpool,给channel绑定read事件用于建立新的连接
+### One Loop per Thread 模型
 
-6. read事件绑定连接时，手动绑定麻烦，创建个httpconn替我们绑定。绑定完事件后发现如果读取完了或者报错想要关闭有点麻烦，得在channel里面记录eventloop便于我们关闭监听和修改channel。
+* **主线程**
+  拥有一个 `EventLoop`，专门负责监听服务器端口和接收新的客户端连接。
 
-7. channel还是纯粹表单就行，用httpconn记录loop,loop和channel是比较底层一个负责结构一个负责运行，实际只要直接创建httpconn，会自动创建需要的表单并添加到到loop内运行
+* **EventLoopThreadPool**
+  内含多个子线程，每个子线程都拥有一个独立的 `EventLoop`。
 
-8. eventloop里面有点问题，需要考虑loop时和add_channel可能出现的异步问题，wait时可能会有新的channel加入，可能会延迟处理，添加wakechannel用于唤醒。
+* **连接分发**
+  主线程 `accept` 新连接后，将新连接交给线程池中的某个 `EventLoop` 进行读写处理。
 
-9. timer_manager之前懒删除没考虑好，替换为使用版本号判断
+---
 
-10. eventloop和timer里面可能出现线程安全问题
+## 📝 编码过程
 
-11. 服务器连接也是et模式需要一次读完
+根据核心架构设计，从零开始一步步实现web-server。
 
-12. eventloop添加队列
+1. **Channel**
 
-13. 之前清理函数没写好，重新给timer和httpconn传入回调函数
+   * 封装 `fd`、事件类型及回调函数。
 
-14. QPS只有3000，利用perf以及flamegraph进行分析，发现ParseHeader以及ParseLine耗时较久。
+2. **Epoller**
 
-[x] 收到第二次请求和断开有问题,发现是忘记对建立的fd进行释放。
-# perf script -i perf.data &> perf.unfold
+   * 封装 `epoll` 的系统调用接口。
+   * 管理 `Channel` 的注册与移除，在 `wait` 后返回活跃事件。
 
-# ./third_party/FlameGraph/stackcollapse-perf.pl perf.unfold &> perf.folded
+3. **Timer**
 
-# ./third_party/FlameGraph/flamegraph.pl perf.folded > perf.svg
+   * 管理超时事件，`tick` 时检查并处理过期任务。
+
+4. **EventLoop**
+
+   * 封装 `Epoller`、`Channel` 和 `TimerManager`。
+   * 循环中等待事件并调度 `Channel` 的回调函数。
+
+5. **Thread & ThreadPool**
+
+   * `Thread`：封装一个线程和其内部的 `EventLoop`。
+   * `ThreadPool`：统一管理所有线程与 `EventLoop`，并负责调度。
+
+6. **Server**
+
+   * 创建 `listenfd` 与 `acceptChannel`，负责接收新连接。
+   * 将新连接交给 `ThreadPool` 管理。
+
+7. **HttpConn**
+
+   * 封装一个 HTTP 连接，自动为 `Channel` 绑定回调。
+   * 内部保存 `EventLoop`，便于关闭和修改监听。
+   * 继承`ProtocolHandler`，便于切换别的连接。
+
+8. **优化点**
+
+   * EventLoop 可能在循环和 `AddChannel` 时产生异步问题：通过 `WakeChannel` 唤醒。
+   * Timer 采用 **版本号判断** 替代懒删除。
+   * EventLoop 与 Timer 涉及多线程安全问题，需要加锁。
+   * Server 与 HttpConn 使用 **ET 模式**，需要 `while` 循环一次性读完。
+   * EventLoop 内部添加 **pending 队列**，减少锁竞争。
+   * Timer 与 HttpConn 增加回调函数，确保连接能正确关闭。
+   * 通过 `perf` 与 `flamegraph` 定位性能瓶颈：
+
+     * `ParseHeader`、`ParseLine` 开销大。
+     * 使用 `find` 替代 `regex` 提升性能。
+
+---
+
+## 🚀 快速开始
+
+**环境**：
+
+* WSL2（Ubuntu 22）
+* Cmake
+* GCC(g++)
+
+```bash
+# 克隆仓库
+git clone --recurse-submodules https://github.com/errorworld2000/web-server.git
+
+# 进入根目录
+cd ./web-server
+
+# 运行web-server
+./build/web-server
+```
+
+---
+
+## 🔧 测试方法
+
+```bash
+# 安装Apache Benchmark(ab)
+sudo apt update
+sudo apt install apache2-utils
+
+# 短连接测试
+ab -n 100000 -c 300 http://127.0.0.1:8080/
+
+# 长连接测试
+ab -n 100000 -c 300 -k http://127.0.0.1:8080/
+
+# 查找进程
+pgrep web-server
+
+# 性能分析
+perf record -g -p PID
+perf script -i perf.data &> perf.unfold
+./third_party/FlameGraph/stackcollapse-perf.pl perf.unfold &> perf.folded
+./third_party/FlameGraph/flamegraph.pl perf.folded > perf.svg
+```
+
+---
+
+## 📑 性能测试结果
+
+|连接类型|请求数|并发数|QPS|
+|-|-|-|-|
+|短连接|100000|300|3058.48|
+|长连接|100000|300|26735.34|
+
+---
+
+## 👾 Bug
+
+* [ ] 压测 10w 短连接时，最后部分请求未收到响应（长连接无此问题）。
+
+---

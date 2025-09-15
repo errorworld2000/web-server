@@ -3,7 +3,6 @@
 #include <algorithm>
 #include <assert.h>
 #include <cstddef>
-#include <regex>
 
 #include "auth_service.h"
 
@@ -104,28 +103,46 @@ int HttpRequest::ConverHex(char ch) {
 }
 
 bool HttpRequest::ParseRequestLine(const std::string& line) {
-  std::regex patten("^([^ ]*) ([^ ]*) HTTP/([^ ]*)$", std::regex::ECMAScript);
-  std::smatch subMatch;
-  if (regex_match(line, subMatch, patten)) {
-    method_ = subMatch[1];
-    path_ = subMatch[2];
-    version_ = subMatch[3];
-    state_ = ParseState::HEADER;
-    if (path_ == "/") {
-      path_ = "/index.html";
-    } else {
-      for (auto& item : DEFAULT_HTML) {
-        if (item == path_) {
-          path_ += ".html";
-          break;
-        }
+  size_t method_end = line.find(' ');
+  if (method_end == std::string::npos) {
+    state_ = ParseState::ERROR;
+    return false;
+  }
+  method_ = line.substr(0, method_end);
+
+  size_t path_start = line.find_first_not_of(' ', method_end);
+  if (path_start == std::string::npos) {
+    state_ = ParseState::ERROR;
+    return false;
+  }
+
+  size_t path_end = line.find(' ', path_start);
+  if (path_end == std::string::npos) {
+    state_ = ParseState::ERROR;
+    return false;
+  }
+  path_ = line.substr(path_start, path_end - path_start);
+
+  size_t version_start = line.find_first_not_of(' ', path_end);
+  if (version_start == std::string::npos ||
+      line.substr(version_start, 5) != "HTTP/") {
+    state_ = ParseState::ERROR;
+    return false;
+  }
+  version_ = line.substr(version_start + 5);
+
+  state_ = ParseState::HEADER;
+  if (path_ == "/") {
+    path_ = "/index.html";
+  } else {
+    for (auto& item : DEFAULT_HTML) {
+      if (item == path_) {
+        path_ += ".html";
+        break;
       }
     }
-    return true;
   }
-  perror("RequestLine Error");
-  state_ = ParseState::ERROR;
-  return false;
+  return true;
 }
 
 void HttpRequest::ParseHeader(const std::string& line) {
@@ -138,10 +155,20 @@ void HttpRequest::ParseHeader(const std::string& line) {
       state_ = ParseState::FINISH;
     }
   } else {
-    std::regex patten("^([^:]*): ?(.*)$", std::regex::ECMAScript);
-    std::smatch subMatch;
-    if (regex_match(line, subMatch, patten)) {
-      header_[subMatch[1]] = subMatch[2];
+    size_t colon_pos = line.find(':');
+    if (colon_pos != std::string::npos) {
+      std::string key = line.substr(0, colon_pos);
+      size_t key_end = key.find_last_not_of(" \t");
+      if (key_end != std::string::npos) {
+        key.resize(key_end + 1);
+      }
+
+      std::string value = line.substr(colon_pos + 1);
+      size_t value_start = value.find_first_not_of(" \t");
+      if (value_start != std::string::npos) {
+        value = value.substr(value_start);
+      }
+      header_[key] = value;
     } else {
       state_ = ParseState::ERROR;
     }

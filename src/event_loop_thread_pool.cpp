@@ -1,12 +1,8 @@
 #include "event_loop_thread_pool.h"
 
 #include <assert.h>
-EventLoopThreadPool::EventLoopThreadPool(std::shared_ptr<EventLoop> base_loop,
-                                         int thread_nums)
-    : thraed_nums_(thread_nums),
-      next_(0),
-      base_loop_(std::move(base_loop)),
-      started_(false) {
+EventLoopThreadPool::EventLoopThreadPool(int thread_nums)
+    : thraed_nums_(thread_nums), next_(0), started_(false) {
   assert(thraed_nums_ > 0);
 }
 

@@ -12,12 +12,14 @@
 
 #include "fcntl.h"
 
+static const int MAXFDS = 101000;
+
 Server::Server(int port, int thread_nums, int timeout)
     : port_(port),
       listen_fd_(SocketBindListen(port_)),
-      base_loop_(std::make_shared<EventLoop>()),
+      base_loop_(std::make_unique<EventLoop>()),
       event_loop_thread_pool_(
-          std::make_unique<EventLoopThreadPool>(base_loop_, thread_nums)),
+          std::make_unique<EventLoopThreadPool>(thread_nums)),
       timeout_(timeout) {
   accept_channel_ = std::make_shared<Channel>(listen_fd_);
   accept_channel_->SetEvents(EPOLLIN | EPOLLET);

@@ -8,8 +8,6 @@
 #include "http/http_conn.h"
 #include "protocol_handler.h"
 
-static const int MAXFDS = 100000;
-
 class Server {
  public:
   Server(int port, int thread_nums, int timeout);
@@ -21,7 +19,7 @@ class Server {
   int port_;
   int listen_fd_;
   std::shared_ptr<Channel> accept_channel_;
-  std::shared_ptr<EventLoop> base_loop_;
+  std::unique_ptr<EventLoop> base_loop_;
   std::unique_ptr<EventLoopThreadPool> event_loop_thread_pool_;
   std::unordered_map<int, std::shared_ptr<ProtocolHandler>> user_;
 

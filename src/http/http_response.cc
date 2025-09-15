@@ -100,7 +100,7 @@ void HttpResponse::Serialize(std::vector<char>& buff) const {
   std::string conn = "Connection: ";
   if (is_keep_alive_) {
     conn += "keep-alive\r\n";
-    conn += "keep-alive: max=6, timeout=120\r\n";
+    conn += "keep-alive: timeout=120\r\n";
   } else {
     conn += "close\r\n";
   }
